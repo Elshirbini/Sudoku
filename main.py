@@ -1,0 +1,536 @@
+"""
+main.py — Sudoku Desktop App Entry Point.
+
+Clean, minimal UI modeled after top mobile Sudoku apps.
+  • 9×9 interactive grid with dynamic highlighting for rows/cols/boxes and identical numbers.
+  • Number pad (1-9) with completion tracking.
+  • Action bar: Undo, Erase, Reset, New Game.
+  • Intelligent cell feedback (error backgrounds, blue text for user inputs).
+"""
+
+from __future__ import annotations
+
+import sys
+import time
+import tkinter as tk
+from tkinter import font as tkfont
+from tkinter import messagebox, ttk
+from typing import Callable, Any
+
+from board import Board
+from generator import generate_puzzle
+from algorithms import ALGORITHM_MAP
+
+
+# ============================================================================
+#  Theme constants (Light / Minimal)
+# ============================================================================
+
+class Theme:
+    # Backgrounds
+    BG_ROOT       = "#FFFFFF"
+    
+    # Grid Backgrounds
+    CELL_EMPTY    = "#FFFFFF"
+    CELL_SELECTED = "#A2D5F2"  # Bright light active blue
+    CELL_RELATED  = "#E2EBF3"  # Faint blue-gray for rows/cols/boxes
+    CELL_MATCH    = "#CBDBED"  # Slightly darker blue-gray for matching numbers
+    CELL_ERROR_BG = "#F7CFD6"  # Soft red for incorrect
+    
+    # Text Colors
+    TXT_PRIMARY   = "#344861"  # Standard dark slate
+    TXT_FIXED     = "#344861"  # Dark slate for fixed numbers
+    TXT_USER      = "#4A75B9"  # Slate blue for user input
+    TXT_ERROR     = "#E55C6C"  # Red for mistakes
+    TXT_MUTED     = "#ADB5BD"  # Light gray for UI elements
+    
+    # Borders
+    BORDER_OUTER  = "#344861"  # Thick dark slate border matches fixed text
+    BORDER_INNER  = "#BFC6D4"  # Thin light gray border
+    
+    # Buttons & UI
+    BTN_BG        = "#F8F9FA"
+    BTN_HOVER     = "#E9ECEF"
+    BTN_FG        = "#495057"
+    
+    # Numpad specifics
+    NUM_BG        = "#FFFFFF"  # Transparent to match root background
+    NUM_FG        = "#295AA4"  # Deep blue matching reference image
+    NUM_USED      = "#FFFFFF"  # Transparent to match root background
+    NUM_USED_FG   = "#868E96"  # Dark gray text for disabled state
+    
+    # Fonts
+    FONT_TITLE    = ("Helvetica Neue", 28, "bold")
+    FONT_SUBTITLE = ("Helvetica Neue", 14)
+    FONT_CELL     = ("Helvetica", 28)                # Regular, very readable
+    FONT_FIXED    = ("Helvetica", 28)                # Matching size for clues
+    FONT_BTN      = ("Helvetica Neue", 11, "bold")
+    FONT_NUMPAD   = ("Helvetica", 26, "bold")
+
+
+# ============================================================================
+#  Utility: rounded button (Canvas-based for custom look)
+# ============================================================================
+
+class RoundedButton(tk.Canvas):
+    """A canvas-drawn button with rounded corners and hover animation."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command: Callable,
+        width: int = 60,
+        height: int = 60,
+        bg: str = Theme.BTN_BG,
+        hover_bg: str = Theme.BTN_HOVER,
+        fg: str = Theme.BTN_FG,
+        font: tuple = Theme.FONT_BTN,
+        radius: int = 12,
+        canvas_bg: str = Theme.BG_ROOT,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            parent,
+            width=width,
+            height=height,
+            bg=canvas_bg,
+            highlightthickness=0,
+            **kwargs,
+        )
+        self._bg = bg
+        self._hover_bg = hover_bg
+        self._fg = fg
+        self._Original_fg = fg # Keep track of assigned foreground
+        self._font = font
+        self._radius = radius
+        self._text = text
+        self._command = command
+        self._btn_w = width
+        self._btn_h = height
+        self._current_color = bg
+        self._active = True
+
+        self.after_idle(lambda: self._draw(bg, self._fg))
+
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<ButtonPress-1>", self._on_press)
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    def _on_enter(self, e: Any) -> None:
+        if self._active:
+            self._draw(self._hover_bg, self._Original_fg)
+
+    def _on_leave(self, e: Any) -> None:
+        if self._active:
+            self._draw(self._bg, self._Original_fg)
+
+    def _on_press(self, e: Any) -> None:
+        if self._active:
+            self._draw(self._bg, self._Original_fg)
+            if self._command:
+                self._command()
+
+    def _on_release(self, e: Any) -> None:
+        if self._active:
+            # We are still within widget, handle leave/enter naturally
+            # Just redraw hover state when released.
+            self._draw(self._hover_bg, self._Original_fg)
+
+    def _draw(self, bg_color: str, fg_color: str) -> None:
+        self._current_color = bg_color
+        self.delete("all")
+        r = self._radius
+        w, h = self._btn_w, self._btn_h
+        self.create_polygon(
+            r, 0,  w - r, 0,
+            w, 0,  w, r,
+            w, h - r,  w, h,
+            w - r, h,  r, h,
+            0, h,  0, h - r,
+            0, r,  0, 0,
+            smooth=True,
+            fill=bg_color,
+            outline="",
+        )
+        self.create_text(
+            w // 2, h // 2,
+            text=self._text,
+            fill=fg_color,
+            font=self._font,
+            justify=tk.CENTER
+        )
+
+    def set_state(self, active: bool, dim_bg: str = Theme.NUM_USED, dim_fg: str = Theme.NUM_USED_FG) -> None:
+        """Dim (disable) or restore (enable) the button."""
+        self._active = active
+        if active:
+            self._draw(self._bg, self._Original_fg)
+        else:
+            self._draw(dim_bg, dim_fg)
+
+
+# ============================================================================
+#  Main Application
+# ============================================================================
+
+class SudokuApp:
+    """Full Sudoku desktop application."""
+
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.board: Board | None = None
+        self.selected: tuple[int, int] | None = None
+        self.difficulty = tk.StringVar(value="Easy")
+        self.solution_type = "forward_checking"
+
+        # Widget references
+        self.cells: list[list[tuple[tk.Frame, tk.Label, tk.StringVar]]] = []
+        self.numpad_btns: dict[int, RoundedButton] = {}
+
+        self._configure_root()
+        self._build_ui()
+        self._new_game()
+
+    def _configure_root(self) -> None:
+        self.root.title("Sudoku")
+        self.root.configure(bg=Theme.BG_ROOT)
+
+        # Set default window size in case user exits fullscreen
+        self.root.update_idletasks()
+        w, h = 600, 850
+        x = (self.root.winfo_screenwidth() - w) // 2
+        y = (self.root.winfo_screenheight() - h) // 2
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+        
+        # Open in fullscreen by default
+        self.root.attributes("-fullscreen", True)
+        
+        # Allow hitting Escape to exit fullscreen
+        self.root.bind("<Escape>", lambda event: self.root.attributes("-fullscreen", False))
+
+        # Global keybind for numpad integration
+        self.root.bind("<Key>", self._on_key)
+
+    # ------------------------------------------------------------------
+    # UI Construction
+    # ------------------------------------------------------------------
+
+    def _build_ui(self) -> None:
+        main_container = tk.Frame(self.root, bg=Theme.BG_ROOT)
+        # Using expand=True without fill ensures the board is perfectly centered in fullscreen
+        main_container.pack(expand=True, padx=10, pady=5)
+
+        # ── Header ────────────────────────────────────────────────────
+        header = tk.Frame(main_container, bg=Theme.BG_ROOT)
+        header.pack(fill=tk.X, pady=(5, 10))
+
+        tk.Label(
+            header,
+            text="Sudoku",
+            font=Theme.FONT_TITLE,
+            fg=Theme.TXT_PRIMARY,
+            bg=Theme.BG_ROOT,
+        ).pack(side=tk.LEFT)
+
+        # Difficulty Menu
+        diff_menu = tk.OptionMenu(
+            header,
+            self.difficulty,
+            "Easy", "Medium", "Hard",
+            command=self._on_diff_change
+        )
+        diff_menu.config(
+            bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE,
+            highlightthickness=0, indicatoron=0, bd=0, activebackground=Theme.BG_ROOT, activeforeground=Theme.TXT_USER
+        )
+        diff_menu["menu"].config(bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE)
+        diff_menu.pack(side=tk.RIGHT, pady=8)
+
+        # ── Grid ──────────────────────────────────────────────────────
+        grid_container = tk.Frame(main_container, bg=Theme.BG_ROOT)
+        grid_container.pack(anchor=tk.N)
+
+        outer = tk.Frame(
+            grid_container,
+            bg=Theme.BORDER_OUTER,
+            bd=0,
+            highlightthickness=2,
+            highlightbackground=Theme.BORDER_OUTER,
+        )
+        outer.pack()
+        self._build_cell_grid(outer)
+
+        # ── Action Bar ────────────────────────────────────────────────
+        action_bar = tk.Frame(main_container, bg=Theme.BG_ROOT)
+        action_bar.pack(fill=tk.X, pady=(15, 10))
+        
+        # Center the action buttons
+        action_inner = tk.Frame(action_bar, bg=Theme.BG_ROOT)
+        action_inner.pack()
+
+        actions = [
+            ("⟳ New", self._new_game),
+            ("↺ Reset", self._reset_game),
+            ("↩ Undo", self._undo),
+            ("⌫ Erase", self._erase),
+        ]
+        
+        for text, cmd in actions:
+            btn = RoundedButton(
+                action_inner, text=text, command=cmd,
+                width=75, height=40, radius=8,
+                bg=Theme.BTN_BG, hover_bg=Theme.BTN_HOVER, fg=Theme.BTN_FG,
+                font=Theme.FONT_BTN
+            )
+            btn.pack(side=tk.LEFT, padx=10)
+
+        # ── Numpad ────────────────────────────────────────────────────
+        numpad_bar = tk.Frame(main_container, bg=Theme.BG_ROOT)
+        numpad_bar.pack(fill=tk.X, pady=(5, 5))
+        
+        numpad_inner = tk.Frame(numpad_bar, bg=Theme.BG_ROOT)
+        numpad_inner.pack()
+
+        for i in range(1, 10):
+            btn = RoundedButton(
+                numpad_inner, text=str(i), command=lambda digit=i: self._on_numpad_click(digit),
+                width=50, height=55, radius=8,
+                bg=Theme.NUM_BG, hover_bg=Theme.BTN_HOVER, fg=Theme.NUM_FG,
+                font=Theme.FONT_NUMPAD
+            )
+            btn.pack(side=tk.LEFT, padx=3)
+            self.numpad_btns[i] = btn
+
+    def _build_cell_grid(self, parent: tk.Frame) -> None:
+        self.cells = []
+        for r in range(9):
+            self.cells.append([None] * 9) # type: ignore
+            
+        parent.config(bg=Theme.BORDER_OUTER, highlightthickness=3, highlightbackground=Theme.BORDER_OUTER, bd=0)
+
+        for br in range(3):
+            for bc in range(3):
+                # The 3x3 container that handles thin internal borders
+                box = tk.Frame(parent, bg=Theme.BORDER_INNER)
+                
+                # Thick 2-pixel spacing between blocks reveals the BORDER_OUTER parent
+                pad_top = 2 if br > 0 else 0
+                pad_left = 2 if bc > 0 else 0
+                box.grid(row=br, column=bc, pady=(pad_top, 0), padx=(pad_left, 0))
+
+                for r in range(3):
+                    for c in range(3):
+                        # Thin 1-pixel spacing between cells reveals BORDER_INNER
+                        cell_pad_top = 1 if r > 0 else 0
+                        cell_pad_left = 1 if c > 0 else 0
+                        
+                        frame = tk.Frame(box, bg=Theme.CELL_EMPTY)
+                        frame.grid(row=r, column=c, pady=(cell_pad_top, 0), padx=(cell_pad_left, 0))
+                        
+                        global_r, global_c = br * 3 + r, bc * 3 + c
+                        
+                        var = tk.StringVar()
+                        lbl = tk.Label(
+                            frame,
+                            textvariable=var,
+                            width=2,
+                            height=1,
+                            font=Theme.FONT_CELL,
+                            bg=Theme.CELL_EMPTY,
+                            fg=Theme.TXT_PRIMARY,
+                            bd=0, highlightthickness=0,
+                            cursor="hand2"
+                        )
+                        # Padding determines final square size for clicking
+                        lbl.pack(ipady=10, ipadx=8)
+
+                        lbl.bind("<Button-1>", lambda e, row=global_r, col=global_c: self._on_click(row, col))
+                        self.cells[global_r][global_c] = (frame, lbl, var) # type: ignore
+
+    # ------------------------------------------------------------------
+    # Grid Rendering & Highlighting
+    # ------------------------------------------------------------------
+
+    def _render_board(self) -> None:
+        """Redraw every cell from self.board.current_board and update numpad."""
+        if not self.board:
+            return
+        # Calculate selected value for highlighting identical numbers
+        selected_val = 0
+        if self.selected:
+            sr, sc = self.selected
+            # We highlight matching identical values if the selected cell isn't empty
+            # and it is either Fixed or CORRECT. (Don't highlight identical wrong numbers)
+            val = self.board.get_value(sr, sc)
+            if val != 0 and val == self.board.solution[sr][sc]:
+                selected_val = val
+
+        for r in range(9):
+            for c in range(9):
+                self._render_cell(r, c, selected_val)
+                
+        self._update_numpad_state()
+
+    def _is_related(self, r: int, c: int, sr: int, sc: int) -> bool:
+        """True if cell (r,c) shares row, col or box with (sr,sc)."""
+        if r == sr or c == sc:
+            return True
+        if (r // 3) == (sr // 3) and (c // 3) == (sc // 3):
+            return True
+        return False
+
+    def _render_cell(self, r: int, c: int, selected_val: int) -> None:
+        _, lbl, var = self.cells[r][c]
+        value = self.board.get_value(r, c)
+        is_fixed = self.board.is_fixed(r, c)
+        is_selected = (self.selected == (r, c))
+
+        bg_color = Theme.CELL_EMPTY
+        font = Theme.FONT_CELL
+        fg_color = Theme.TXT_PRIMARY
+
+        # 1. Background Logic
+        if value != 0 and value != self.board.solution[r][c]:
+            bg_color = Theme.CELL_ERROR_BG
+        elif is_selected:
+            bg_color = Theme.CELL_SELECTED
+        elif value != 0 and value == selected_val:
+            bg_color = Theme.CELL_MATCH
+        elif self.selected and self._is_related(r, c, self.selected[0], self.selected[1]):
+            bg_color = Theme.CELL_RELATED
+
+        # 2. Foreground / Font Logic
+        if is_fixed:
+            fg_color = Theme.TXT_FIXED
+            font = Theme.FONT_FIXED
+        elif value != 0:
+            if value == self.board.solution[r][c]:
+                fg_color = Theme.TXT_USER
+            else:
+                fg_color = Theme.TXT_ERROR
+
+        lbl.config(bg=bg_color, fg=fg_color, font=font)
+        var.set("" if value == 0 else str(value))
+        
+    def _update_numpad_state(self) -> None:
+        """Check how many times each number is correctly placed. Dim complete ones."""
+        if not self.board:
+            return
+            
+        counts = {i: 0 for i in range(1, 10)}
+        for r in range(9):
+            for c in range(9):
+                val = self.board.get_value(r, c)
+                # Count only correctly placed fully validated numbers
+                if val != 0 and val == self.board.solution[r][c]:
+                    counts[val] += 1
+                    
+        for digit in range(1, 10):
+            if counts[digit] >= 9:
+                self.numpad_btns[digit].set_state(active=False)
+            else:
+                self.numpad_btns[digit].set_state(active=True)
+
+    # ------------------------------------------------------------------
+    # Event Handlers
+    # ------------------------------------------------------------------
+
+    def _on_click(self, row: int, col: int) -> None:
+        self.selected = (row, col)
+        self._render_board()
+
+    def _on_key(self, event: tk.Event) -> None:
+        if not self.board or not self.selected:
+            return
+            
+        char = event.char
+        if char.isdigit() and "1" <= char <= "9":
+            digit = int(char)
+            # Only allow if the number isn't fully used
+            if self.numpad_btns[digit]._active:
+                self._on_numpad_click(digit)
+        # Support backspace / delete
+        elif event.keysym in ("BackSpace", "Delete"):
+            self._erase()
+
+    def _on_numpad_click(self, digit: int) -> None:
+        if not self.board or not self.selected:
+            return
+            
+        row, col = self.selected
+        if self.board.is_fixed(row, col):
+            return
+
+        # Do not place digit if it is already completed on the board
+        if not self.numpad_btns[digit]._active:
+            return
+
+        self.board.record_move(row, col, digit)
+        self._render_board()
+        self._check_victory()
+
+    def _on_diff_change(self, *args: Any) -> None:
+        # Prompt to start a new game when difficulty drops down changes
+        if messagebox.askyesno("New Game", f"Start a new {self.difficulty.get()} game?"):
+            self._new_game()
+
+    # ------------------------------------------------------------------
+    # Game actions
+    # ------------------------------------------------------------------
+
+    def _new_game(self) -> None:
+        # Note: We solve strictly using our fastest logic algorithm behind the scenes.
+        # "Constraint Propagation" generates the internal solution fast without UI elements.
+        puzzle, solution = generate_puzzle(
+            self.difficulty.get(),
+            solution_type=self.solution_type,
+        )
+        self.board = Board(puzzle, solution)
+        self.selected = None
+        self._render_board()
+
+    def _reset_game(self) -> None:
+        if not self.board:
+            return
+        if messagebox.askyesno("Reset", "Are you sure you want to restart this puzzle?"):
+            self.board.reset()
+            self.selected = None
+            self._render_board()
+
+    def _undo(self) -> None:
+        if not self.board:
+            return
+        result = self.board.undo()
+        if result is None:
+            return
+        row, col, _ = result
+        self.selected = (row, col)
+        self._render_board()
+        
+    def _erase(self) -> None:
+        if not self.board or not self.selected:
+            return
+        row, col = self.selected
+        if not self.board.is_fixed(row, col):
+            self.board.record_move(row, col, 0)
+            self._render_board()
+
+    def _check_victory(self) -> None:
+        if self.board and self.board.is_complete():
+            messagebox.showinfo("Sudoku", "🎉 Congratulations!\nYou solved the puzzle!")
+
+
+# ============================================================================
+#  Entry point
+# ============================================================================
+
+def main() -> None:
+    root = tk.Tk()
+    app = SudokuApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
