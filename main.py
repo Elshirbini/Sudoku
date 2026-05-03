@@ -22,9 +22,8 @@ from generator import generate_puzzle
 from algorithms import ALGORITHM_MAP
 
 
-# ============================================================================
 #  Theme constants (Light / Minimal)
-# ============================================================================
+
 
 class Theme:
     # Backgrounds
@@ -32,21 +31,21 @@ class Theme:
     
     # Grid Backgrounds
     CELL_EMPTY    = "#FFFFFF"
-    CELL_SELECTED = "#A2D5F2"  # Bright light active blue
-    CELL_RELATED  = "#E2EBF3"  # Faint blue-gray for rows/cols/boxes
-    CELL_MATCH    = "#CBDBED"  # Slightly darker blue-gray for matching numbers
-    CELL_ERROR_BG = "#F7CFD6"  # Soft red for incorrect
+    CELL_SELECTED = "#A2D5F2"  
+    CELL_RELATED  = "#E2EBF3"  
+    CELL_MATCH    = "#CBDBED"  
+    CELL_ERROR_BG = "#F7CFD6"  
     
     # Text Colors
-    TXT_PRIMARY   = "#344861"  # Standard dark slate
-    TXT_FIXED     = "#344861"  # Dark slate for fixed numbers
-    TXT_USER      = "#4A75B9"  # Slate blue for user input
-    TXT_ERROR     = "#E55C6C"  # Red for mistakes
-    TXT_MUTED     = "#ADB5BD"  # Light gray for UI elements
+    TXT_PRIMARY   = "#344861"  
+    TXT_FIXED     = "#344861"  
+    TXT_USER      = "#4A75B9"  
+    TXT_ERROR     = "#E55C6C"  
+    TXT_MUTED     = "#ADB5BD"  
     
     # Borders
-    BORDER_OUTER  = "#344861"  # Thick dark slate border matches fixed text
-    BORDER_INNER  = "#BFC6D4"  # Thin light gray border
+    BORDER_OUTER  = "#344861"  
+    BORDER_INNER  = "#BFC6D4"  
     
     # Buttons & UI
     BTN_BG        = "#F8F9FA"
@@ -54,16 +53,16 @@ class Theme:
     BTN_FG        = "#495057"
     
     # Numpad specifics
-    NUM_BG        = "#FFFFFF"  # Transparent to match root background
-    NUM_FG        = "#295AA4"  # Deep blue matching reference image
-    NUM_USED      = "#FFFFFF"  # Transparent to match root background
-    NUM_USED_FG   = "#868E96"  # Dark gray text for disabled state
+    NUM_BG        = "#FFFFFF"  
+    NUM_FG        = "#295AA4"  
+    NUM_USED      = "#FFFFFF"  
+    NUM_USED_FG   = "#868E96"  
     
     # Fonts
     FONT_TITLE    = ("Helvetica Neue", 28, "bold")
     FONT_SUBTITLE = ("Helvetica Neue", 14)
-    FONT_CELL     = ("Helvetica", 28)                # Regular, very readable
-    FONT_FIXED    = ("Helvetica", 28)                # Matching size for clues
+    FONT_CELL     = ("Helvetica", 28)                
+    FONT_FIXED    = ("Helvetica", 28)                
     FONT_BTN      = ("Helvetica Neue", 11, "bold")
     FONT_NUMPAD   = ("Helvetica", 26, "bold")
 
@@ -171,9 +170,7 @@ class RoundedButton(tk.Canvas):
             self._draw(dim_bg, dim_fg)
 
 
-# ============================================================================
 #  Main Application
-# ============================================================================
 
 class SudokuApp:
     """Full Sudoku desktop application."""
@@ -213,16 +210,15 @@ class SudokuApp:
         # Global keybind for numpad integration
         self.root.bind("<Key>", self._on_key)
 
-    # ------------------------------------------------------------------
+
     # UI Construction
-    # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
         main_container = tk.Frame(self.root, bg=Theme.BG_ROOT)
         # Using expand=True without fill ensures the board is perfectly centered in fullscreen
         main_container.pack(expand=True, padx=10, pady=5)
 
-        # ── Header ────────────────────────────────────────────────────
+        # Header 
         header = tk.Frame(main_container, bg=Theme.BG_ROOT)
         header.pack(fill=tk.X, pady=(5, 10))
 
@@ -248,7 +244,7 @@ class SudokuApp:
         diff_menu["menu"].config(bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE)
         diff_menu.pack(side=tk.RIGHT, pady=8)
 
-        # ── Grid ──────────────────────────────────────────────────────
+        # Grid 
         grid_container = tk.Frame(main_container, bg=Theme.BG_ROOT)
         grid_container.pack(anchor=tk.N)
 
@@ -262,7 +258,7 @@ class SudokuApp:
         outer.pack()
         self._build_cell_grid(outer)
 
-        # ── Action Bar ────────────────────────────────────────────────
+        # Action Bar
         action_bar = tk.Frame(main_container, bg=Theme.BG_ROOT)
         action_bar.pack(fill=tk.X, pady=(15, 10))
         
@@ -286,7 +282,7 @@ class SudokuApp:
             )
             btn.pack(side=tk.LEFT, padx=10)
 
-        # ── Numpad ────────────────────────────────────────────────────
+        # Numpad
         numpad_bar = tk.Frame(main_container, bg=Theme.BG_ROOT)
         numpad_bar.pack(fill=tk.X, pady=(5, 5))
         
@@ -349,9 +345,7 @@ class SudokuApp:
                         lbl.bind("<Button-1>", lambda e, row=global_r, col=global_c: self._on_click(row, col))
                         self.cells[global_r][global_c] = (frame, lbl, var) # type: ignore
 
-    # ------------------------------------------------------------------
-    # Grid Rendering & Highlighting
-    # ------------------------------------------------------------------
+    # Grid Rendering & Highlighting    
 
     def _render_board(self) -> None:
         """Redraw every cell from self.board.current_board and update numpad."""
@@ -433,9 +427,9 @@ class SudokuApp:
             else:
                 self.numpad_btns[digit].set_state(active=True)
 
-    # ------------------------------------------------------------------
+    
     # Event Handlers
-    # ------------------------------------------------------------------
+    
 
     def _on_click(self, row: int, col: int) -> None:
         self.selected = (row, col)
@@ -476,9 +470,9 @@ class SudokuApp:
         if messagebox.askyesno("New Game", f"Start a new {self.difficulty.get()} game?"):
             self._new_game()
 
-    # ------------------------------------------------------------------
+    
     # Game actions
-    # ------------------------------------------------------------------
+    
 
     def _new_game(self) -> None:
         # Note: We solve strictly using our fastest logic algorithm behind the scenes.
@@ -521,10 +515,7 @@ class SudokuApp:
         if self.board and self.board.is_complete():
             messagebox.showinfo("Sudoku", "🎉 Congratulations!\nYou solved the puzzle!")
 
-
-# ============================================================================
 #  Entry point
-# ============================================================================
 
 def main() -> None:
     root = tk.Tk()

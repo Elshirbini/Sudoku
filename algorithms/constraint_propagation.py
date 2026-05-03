@@ -18,9 +18,8 @@ from __future__ import annotations
 import copy
 
 
-# ---------------------------------------------------------------------------
+
 # Domain helpers
-# ---------------------------------------------------------------------------
 
 def _peers(row: int, col: int) -> list[tuple[int, int]]:
     result: set[tuple[int, int]] = set()
@@ -76,9 +75,8 @@ def _assign(
     return True
 
 
-# ---------------------------------------------------------------------------
+
 # Propagation pass
-# ---------------------------------------------------------------------------
 
 def _propagate(
     board: list[list[int]],
@@ -156,9 +154,9 @@ def _propagate(
     return True
 
 
-# ---------------------------------------------------------------------------
+
 # Backtracking (MRV selection + propagation at each node)
-# ---------------------------------------------------------------------------
+
 
 def _select_cell(
     board: list[list[int]],

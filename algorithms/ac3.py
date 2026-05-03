@@ -17,9 +17,8 @@ import copy
 from collections import deque
 
 
-# ---------------------------------------------------------------------------
+
 # Constraint graph helpers
-# ---------------------------------------------------------------------------
 
 def _peers(row: int, col: int) -> list[tuple[int, int]]:
     result: set[tuple[int, int]] = set()
@@ -64,9 +63,8 @@ def _build_domains(board: list[list[int]]) -> list[list[set[int]]]:
     return domains
 
 
-# ---------------------------------------------------------------------------
+
 # AC-3 core
-# ---------------------------------------------------------------------------
 
 def _revise(
     domains: list[list[set[int]]],
@@ -118,9 +116,8 @@ def _ac3(domains: list[list[set[int]]]) -> bool:
     return True
 
 
-# ---------------------------------------------------------------------------
+
 # MRV cell selector
-# ---------------------------------------------------------------------------
 
 def _select_cell(
     board: list[list[int]],
@@ -141,9 +138,9 @@ def _select_cell(
     return best
 
 
-# ---------------------------------------------------------------------------
+
 # Backtracking with full domain snapshot per branch
-# ---------------------------------------------------------------------------
+
 
 def _backtrack(
     board: list[list[int]],
@@ -199,9 +196,8 @@ def _backtrack(
     return False
 
 
-# ---------------------------------------------------------------------------
+
 # Public API
-# ---------------------------------------------------------------------------
 
 def solve(board: list[list[int]]) -> tuple[list[list[int]] | None, int]:
     """

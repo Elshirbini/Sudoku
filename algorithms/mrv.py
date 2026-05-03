@@ -16,10 +16,10 @@ from __future__ import annotations
 import copy
 
 
-# ---------------------------------------------------------------------------
+
 # Domain helpers  (same logic as forward_checking.py, duplicated for
 # module independence — each algorithm is self-contained)
-# ---------------------------------------------------------------------------
+
 
 def _build_domains(board: list[list[int]]) -> list[list[set[int]]]:
     domains: list[list[set[int]]] = [[set() for _ in range(9)] for _ in range(9)]
@@ -54,9 +54,9 @@ def _peers(row: int, col: int) -> list[tuple[int, int]]:
     return list(result)
 
 
-# ---------------------------------------------------------------------------
+
 # MRV cell selector
-# ---------------------------------------------------------------------------
+
 
 def _select_mrv_cell(
     board: list[list[int]],
@@ -89,9 +89,8 @@ def _select_mrv_cell(
     return best
 
 
-# ---------------------------------------------------------------------------
+
 # Solver
-# ---------------------------------------------------------------------------
 
 def _backtrack_mrv(
     board: list[list[int]],

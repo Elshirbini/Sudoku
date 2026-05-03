@@ -14,9 +14,9 @@ from __future__ import annotations
 import copy
 
 
-# ---------------------------------------------------------------------------
+
 # Domain helpers
-# ---------------------------------------------------------------------------
+
 
 def _build_domains(board: list[list[int]]) -> list[list[set[int]]]:
     """
@@ -62,9 +62,9 @@ def _peers(row: int, col: int) -> list[tuple[int, int]]:
     return list(result)
 
 
-# ---------------------------------------------------------------------------
+
 # Solver
-# ---------------------------------------------------------------------------
+
 
 def _find_empty(board: list[list[int]]) -> tuple[int, int] | None:
     for r in range(9):

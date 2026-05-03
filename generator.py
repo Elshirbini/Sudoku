@@ -17,9 +17,9 @@ from algorithms import ALGORITHM_MAP
 from validator import is_valid_move
 
 
-# ---------------------------------------------------------------------------
+
 # Difficulty → number of cells to *remove* from the full solution
-# ---------------------------------------------------------------------------
+
 DIFFICULTY_REMOVALS: dict[str, int] = {
     "Easy":   36,   # ~45 clues remain
     "Medium": 46,   # ~35 clues remain
@@ -35,9 +35,8 @@ SOLVER_MAP: dict[str, callable] = {
 }
 
 
-# ---------------------------------------------------------------------------
+
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _empty_board() -> list[list[int]]:
     return [[0] * 9 for _ in range(9)]
@@ -53,26 +52,6 @@ def _fill_diagonal_boxes(board: list[list[int]]) -> None:
             for c in range(box_start, box_start + 3):
                 board[r][c] = digits[idx]
                 idx += 1
-
-
-def _solve_board(board: list[list[int]]) -> bool:
-    """
-    In-place backtracking solver used *only* during generation.
-    Returns True when the board is fully solved.
-    """
-    for r in range(9):
-        for c in range(9):
-            if board[r][c] == 0:
-                digits = list(range(1, 10))
-                random.shuffle(digits)  # Randomise for puzzle variety
-                for d in digits:
-                    if is_valid_move(board, r, c, d):
-                        board[r][c] = d
-                        if _solve_board(board):
-                            return True
-                        board[r][c] = 0
-                return False
-    return True
 
 
 def _count_solutions(board: list[list[int]], limit: int = 2) -> int:
@@ -122,9 +101,8 @@ def _remove_cells(
     return puzzle
 
 
-# ---------------------------------------------------------------------------
+
 # Public API
-# ---------------------------------------------------------------------------
 
 def generate_puzzle(
     difficulty: str = "Easy",

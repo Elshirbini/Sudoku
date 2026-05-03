@@ -8,9 +8,8 @@ No imports from other project modules — pure, self-contained logic.
 from __future__ import annotations
 
 
-# ---------------------------------------------------------------------------
+
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _row_values(board: list[list[int]], row: int) -> list[int]:
     return [board[row][c] for c in range(9) if board[row][c] != 0]

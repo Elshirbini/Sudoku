@@ -33,17 +33,16 @@ class Board:
         # Undo stack — each entry is (row, col, previous_value)
         self._undo_stack: list[tuple[int, int, int]] = []
 
-    # ------------------------------------------------------------------
     # Fixed-cell queries
-    # ------------------------------------------------------------------
+
 
     def is_fixed(self, row: int, col: int) -> bool:
         """Return True if (row, col) is a pre-filled clue (not editable)."""
         return self.puzzle[row][col] != 0
 
-    # ------------------------------------------------------------------
+
     # Move recording
-    # ------------------------------------------------------------------
+
 
     def record_move(self, row: int, col: int, new_value: int) -> None:
         """
@@ -61,9 +60,8 @@ class Board:
         self._undo_stack.append((row, col, old_value))
         self.current_board[row][col] = new_value
 
-    # ------------------------------------------------------------------
     # Undo
-    # ------------------------------------------------------------------
+
 
     def can_undo(self) -> bool:
         return len(self._undo_stack) > 0
@@ -86,9 +84,7 @@ class Board:
     def clear_undo_stack(self) -> None:
         self._undo_stack.clear()
 
-    # ------------------------------------------------------------------
     # Solve (fill everything from solution)
-    # ------------------------------------------------------------------
 
     def apply_solution(self) -> None:
         """Overwrite current_board with the full solution."""
@@ -106,18 +102,16 @@ class Board:
         self.current_board = [row[:] for row in solved]
         self.clear_undo_stack()
 
-    # ------------------------------------------------------------------
     # Reset
-    # ------------------------------------------------------------------
 
     def reset(self) -> None:
         """Restore current_board to the original puzzle state."""
         self.current_board = [row[:] for row in self.puzzle]
         self.clear_undo_stack()
 
-    # ------------------------------------------------------------------
+
     # Convenience read access
-    # ------------------------------------------------------------------
+
 
     def get_value(self, row: int, col: int) -> int:
         return self.current_board[row][col]
