@@ -67,9 +67,9 @@ class Theme:
     FONT_NUMPAD   = ("Helvetica", 26, "bold")
 
 
-# ============================================================================
+
 #  Utility: rounded button (Canvas-based for custom look)
-# ============================================================================
+
 
 class RoundedButton(tk.Canvas):
     """A canvas-drawn button with rounded corners and hover animation."""
@@ -178,13 +178,12 @@ class SudokuApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.board: Board | None = None
-        self.selected: tuple[int, int] | None = None
         self.difficulty = tk.StringVar(value="Easy")
-        self.solution_type = "forward_checking"
+        self.algorithm = tk.StringVar(value="Backtracking")
+        self.solution_type = "backtracking"
 
         # Widget references
         self.cells: list[list[tuple[tk.Frame, tk.Label, tk.StringVar]]] = []
-        self.numpad_btns: dict[int, RoundedButton] = {}
 
         self._configure_root()
         self._build_ui()
@@ -206,9 +205,6 @@ class SudokuApp:
         
         # Allow hitting Escape to exit fullscreen
         self.root.bind("<Escape>", lambda event: self.root.attributes("-fullscreen", False))
-
-        # Global keybind for numpad integration
-        self.root.bind("<Key>", self._on_key)
 
 
     # UI Construction
@@ -242,7 +238,20 @@ class SudokuApp:
             highlightthickness=0, indicatoron=0, bd=0, activebackground=Theme.BG_ROOT, activeforeground=Theme.TXT_USER
         )
         diff_menu["menu"].config(bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE)
-        diff_menu.pack(side=tk.RIGHT, pady=8)
+        diff_menu.pack(side=tk.RIGHT, pady=8, padx=5)
+
+        # Algorithm Menu
+        algo_menu = tk.OptionMenu(
+            header,
+            self.algorithm,
+            *ALGORITHM_MAP.keys()
+        )
+        algo_menu.config(
+            bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE,
+            highlightthickness=0, indicatoron=0, bd=0, activebackground=Theme.BG_ROOT, activeforeground=Theme.TXT_USER
+        )
+        algo_menu["menu"].config(bg=Theme.BG_ROOT, fg=Theme.TXT_PRIMARY, font=Theme.FONT_SUBTITLE)
+        algo_menu.pack(side=tk.RIGHT, pady=8, padx=5)
 
         # Grid 
         grid_container = tk.Frame(main_container, bg=Theme.BG_ROOT)
@@ -267,37 +276,18 @@ class SudokuApp:
         action_inner.pack()
 
         actions = [
-            ("⟳ New", self._new_game),
-            ("↺ Reset", self._reset_game),
-            ("↩ Undo", self._undo),
-            ("⌫ Erase", self._erase),
+            ("⟳ New Game", self._new_game),
+            ("▶ Solve", self._solve),
         ]
         
         for text, cmd in actions:
             btn = RoundedButton(
                 action_inner, text=text, command=cmd,
-                width=75, height=40, radius=8,
+                width=120, height=45, radius=8,
                 bg=Theme.BTN_BG, hover_bg=Theme.BTN_HOVER, fg=Theme.BTN_FG,
                 font=Theme.FONT_BTN
             )
-            btn.pack(side=tk.LEFT, padx=10)
-
-        # Numpad
-        numpad_bar = tk.Frame(main_container, bg=Theme.BG_ROOT)
-        numpad_bar.pack(fill=tk.X, pady=(5, 5))
-        
-        numpad_inner = tk.Frame(numpad_bar, bg=Theme.BG_ROOT)
-        numpad_inner.pack()
-
-        for i in range(1, 10):
-            btn = RoundedButton(
-                numpad_inner, text=str(i), command=lambda digit=i: self._on_numpad_click(digit),
-                width=50, height=55, radius=8,
-                bg=Theme.NUM_BG, hover_bg=Theme.BTN_HOVER, fg=Theme.NUM_FG,
-                font=Theme.FONT_NUMPAD
-            )
-            btn.pack(side=tk.LEFT, padx=3)
-            self.numpad_btns[i] = btn
+            btn.pack(side=tk.LEFT, padx=15)
 
     def _build_cell_grid(self, parent: tk.Frame) -> None:
         self.cells = []
@@ -337,49 +327,27 @@ class SudokuApp:
                             bg=Theme.CELL_EMPTY,
                             fg=Theme.TXT_PRIMARY,
                             bd=0, highlightthickness=0,
-                            cursor="hand2"
                         )
-                        # Padding determines final square size for clicking
+                        # Padding determines final square size
                         lbl.pack(ipady=10, ipadx=8)
 
-                        lbl.bind("<Button-1>", lambda e, row=global_r, col=global_c: self._on_click(row, col))
                         self.cells[global_r][global_c] = (frame, lbl, var) # type: ignore
 
     # Grid Rendering & Highlighting    
 
     def _render_board(self) -> None:
-        """Redraw every cell from self.board.current_board and update numpad."""
+        """Redraw every cell from self.board.current_board."""
         if not self.board:
             return
-        # Calculate selected value for highlighting identical numbers
-        selected_val = 0
-        if self.selected:
-            sr, sc = self.selected
-            # We highlight matching identical values if the selected cell isn't empty
-            # and it is either Fixed or CORRECT. (Don't highlight identical wrong numbers)
-            val = self.board.get_value(sr, sc)
-            if val != 0 and val == self.board.solution[sr][sc]:
-                selected_val = val
 
         for r in range(9):
             for c in range(9):
-                self._render_cell(r, c, selected_val)
-                
-        self._update_numpad_state()
+                self._render_cell(r, c)
 
-    def _is_related(self, r: int, c: int, sr: int, sc: int) -> bool:
-        """True if cell (r,c) shares row, col or box with (sr,sc)."""
-        if r == sr or c == sc:
-            return True
-        if (r // 3) == (sr // 3) and (c // 3) == (sc // 3):
-            return True
-        return False
-
-    def _render_cell(self, r: int, c: int, selected_val: int) -> None:
+    def _render_cell(self, r: int, c: int) -> None:
         _, lbl, var = self.cells[r][c]
         value = self.board.get_value(r, c)
         is_fixed = self.board.is_fixed(r, c)
-        is_selected = (self.selected == (r, c))
 
         bg_color = Theme.CELL_EMPTY
         font = Theme.FONT_CELL
@@ -388,12 +356,6 @@ class SudokuApp:
         # 1. Background Logic
         if value != 0 and value != self.board.solution[r][c]:
             bg_color = Theme.CELL_ERROR_BG
-        elif is_selected:
-            bg_color = Theme.CELL_SELECTED
-        elif value != 0 and value == selected_val:
-            bg_color = Theme.CELL_MATCH
-        elif self.selected and self._is_related(r, c, self.selected[0], self.selected[1]):
-            bg_color = Theme.CELL_RELATED
 
         # 2. Foreground / Font Logic
         if is_fixed:
@@ -408,62 +370,7 @@ class SudokuApp:
         lbl.config(bg=bg_color, fg=fg_color, font=font)
         var.set("" if value == 0 else str(value))
         
-    def _update_numpad_state(self) -> None:
-        """Check how many times each number is correctly placed. Dim complete ones."""
-        if not self.board:
-            return
-            
-        counts = {i: 0 for i in range(1, 10)}
-        for r in range(9):
-            for c in range(9):
-                val = self.board.get_value(r, c)
-                # Count only correctly placed fully validated numbers
-                if val != 0 and val == self.board.solution[r][c]:
-                    counts[val] += 1
-                    
-        for digit in range(1, 10):
-            if counts[digit] >= 9:
-                self.numpad_btns[digit].set_state(active=False)
-            else:
-                self.numpad_btns[digit].set_state(active=True)
 
-    
-    # Event Handlers
-    
-
-    def _on_click(self, row: int, col: int) -> None:
-        self.selected = (row, col)
-        self._render_board()
-
-    def _on_key(self, event: tk.Event) -> None:
-        if not self.board or not self.selected:
-            return
-            
-        char = event.char
-        if char.isdigit() and "1" <= char <= "9":
-            digit = int(char)
-            # Only allow if the number isn't fully used
-            if self.numpad_btns[digit]._active:
-                self._on_numpad_click(digit)
-        # Support backspace / delete
-        elif event.keysym in ("BackSpace", "Delete"):
-            self._erase()
-
-    def _on_numpad_click(self, digit: int) -> None:
-        if not self.board or not self.selected:
-            return
-            
-        row, col = self.selected
-        if self.board.is_fixed(row, col):
-            return
-
-        # Do not place digit if it is already completed on the board
-        if not self.numpad_btns[digit]._active:
-            return
-
-        self.board.record_move(row, col, digit)
-        self._render_board()
-        self._check_victory()
 
     def _on_diff_change(self, *args: Any) -> None:
         # Prompt to start a new game when difficulty drops down changes
@@ -482,38 +389,25 @@ class SudokuApp:
             solution_type=self.solution_type,
         )
         self.board = Board(puzzle, solution)
-        self.selected = None
         self._render_board()
 
-    def _reset_game(self) -> None:
+    def _solve(self) -> None:
         if not self.board:
             return
-        if messagebox.askyesno("Reset", "Are you sure you want to restart this puzzle?"):
-            self.board.reset()
-            self.selected = None
-            self._render_board()
-
-    def _undo(self) -> None:
-        if not self.board:
-            return
-        result = self.board.undo()
-        if result is None:
-            return
-        row, col, _ = result
-        self.selected = (row, col)
-        self._render_board()
+            
+        solver = ALGORITHM_MAP.get(self.algorithm.get(), ALGORITHM_MAP["Backtracking"])
         
-    def _erase(self) -> None:
-        if not self.board or not self.selected:
-            return
-        row, col = self.selected
-        if not self.board.is_fixed(row, col):
-            self.board.record_move(row, col, 0)
+        start_time = time.time()
+        solved, backtracks = solver(self.board.current_board)
+        elapsed = time.time() - start_time
+        
+        if solved:
+            self.board.apply_algorithm_solution(solved)
             self._render_board()
+        else:
+            messagebox.showerror("Error", "No solution found!")
 
-    def _check_victory(self) -> None:
-        if self.board and self.board.is_complete():
-            messagebox.showinfo("Sudoku", "🎉 Congratulations!\nYou solved the puzzle!")
+
 
 #  Entry point
 

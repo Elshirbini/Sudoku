@@ -30,9 +30,6 @@ class Board:
         self.solution: list[list[int]] = [row[:] for row in solution]
         self.current_board: list[list[int]] = [row[:] for row in puzzle]
 
-        # Undo stack — each entry is (row, col, previous_value)
-        self._undo_stack: list[tuple[int, int, int]] = []
-
     # Fixed-cell queries
 
 
@@ -41,55 +38,13 @@ class Board:
         return self.puzzle[row][col] != 0
 
 
-    # Move recording
 
-
-    def record_move(self, row: int, col: int, new_value: int) -> None:
-        """
-        Record a user edit and apply it to `current_board`.
-
-        Args:
-            row:       0-based row index.
-            col:       0-based column index.
-            new_value: The digit the user entered (0 = cleared).
-        """
-        if self.is_fixed(row, col):
-            return  # Safety guard — fixed cells must never be recorded
-
-        old_value = self.current_board[row][col]
-        self._undo_stack.append((row, col, old_value))
-        self.current_board[row][col] = new_value
-
-    # Undo
-
-
-    def can_undo(self) -> bool:
-        return len(self._undo_stack) > 0
-
-    def undo(self) -> tuple[int, int, int] | None:
-        """
-        Pop the last move from the undo stack and revert `current_board`.
-
-        Returns:
-            (row, col, restored_value) so the UI can update the correct cell,
-            or None if the stack is empty.
-        """
-        if not self._undo_stack:
-            return None
-
-        row, col, old_value = self._undo_stack.pop()
-        self.current_board[row][col] = old_value
-        return row, col, old_value
-
-    def clear_undo_stack(self) -> None:
-        self._undo_stack.clear()
 
     # Solve (fill everything from solution)
 
     def apply_solution(self) -> None:
         """Overwrite current_board with the full solution."""
         self.current_board = [row[:] for row in self.solution]
-        self.clear_undo_stack()
 
     def apply_algorithm_solution(
         self,
@@ -100,14 +55,12 @@ class Board:
         the canonical solution but is always valid) into current_board.
         """
         self.current_board = [row[:] for row in solved]
-        self.clear_undo_stack()
 
     # Reset
 
     def reset(self) -> None:
         """Restore current_board to the original puzzle state."""
         self.current_board = [row[:] for row in self.puzzle]
-        self.clear_undo_stack()
 
 
     # Convenience read access
